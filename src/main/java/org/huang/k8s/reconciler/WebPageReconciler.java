@@ -50,7 +50,8 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
     }
 
     /**
-     * 此方法会在kubectl 调用一个WebPage crd操作api时拦截处理
+     * 此方法会在kubectl 调用一个WebPage crd操作api时拦截处理,
+     * 当crd依赖的configmap/deployment/service等资源被修改同样会触发此方法
      * @param webPage the resource that has been created or updated
      * @param context the context with which the operation is executed
      * @return 更新的结果
@@ -62,13 +63,14 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
         String ns = webPage.getMetadata().getNamespace();
         String configMapName = configMapName(webPage);
         String deploymentName = deploymentName(webPage);
+        log.info("reconcile {} in {}", webPage, ns);
 
         ConfigMap desiredHtmlConfigMap = makeDesiredHtmlConfigMap(ns, configMapName, webPage);
         Deployment desiredDeployment =
                 makeDesiredDeployment(webPage, deploymentName, ns, configMapName);
         Service desiredService = makeDesiredService(webPage, ns, desiredDeployment);
 
-        // 查询更新前的configmap,
+        // 查询当前crd定义的configmap,
         var previousConfigMap = context.getSecondaryResource(ConfigMap.class).orElse(null);
         if (!match(desiredHtmlConfigMap, previousConfigMap)) {
             log.info(
@@ -79,7 +81,7 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
                     .createOrReplace();
         }
 
-        // 查询更新前的service
+        // 查询当前crd定义的service
         var existingService = context.getSecondaryResource(Service.class).orElse(null);
         if (!match(desiredService, existingService)) {
             log.info(
@@ -89,7 +91,7 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
             kubernetesClient.services().inNamespace(ns).resource(desiredService).createOrReplace();
         }
 
-        // 查询更新前的deployment
+        // 查询当前crd定义的deployment
         var existingDeployment = context.getSecondaryResource(Deployment.class).orElse(null);
         if (!match(desiredDeployment, existingDeployment)) {
             log.info(
@@ -107,9 +109,11 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
     }
 
     /**
+     * FIXME 似乎修改configmap没有效果
      * 注册controller监视的事件，当这里注册的事件发生会通知到controller
+     *
      * @param context a {@link EventSourceContext} providing access to information useful to event
-     *        sources
+     *                sources
      * @return
      */
     @Override
@@ -132,6 +136,7 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
 
     /**
      * 对比两个deployment是否相同
+     *
      * @param desiredDeployment
      * @param deployment
      * @return
@@ -149,6 +154,7 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
 
     /**
      * 对比两个service是否相同
+     *
      * @param desiredService
      * @param service
      * @return
@@ -162,6 +168,7 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
 
     /**
      * 对比两个configmap是否相同
+     *
      * @param desiredHtmlConfigMap
      * @param existingConfigMap
      * @return
@@ -176,6 +183,7 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
 
     /**
      * 根据crd构建一个service对象
+     *
      * @param webPage
      * @param ns
      * @param desiredDeployment
@@ -197,6 +205,7 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
 
     /**
      * 根据crd构建一个deployment
+     *
      * @param webPage
      * @param deploymentName
      * @param ns
@@ -232,9 +241,10 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
 
     /**
      * 根据crd构建一个configmap 包含label信息和 index内容
-     * @param ns namespace
+     *
+     * @param ns            namespace
      * @param configMapName e
-     * @param webPage e
+     * @param webPage       e
      * @return configmap
      */
     private ConfigMap makeDesiredHtmlConfigMap(String ns, String configMapName, WebPage webPage) {
@@ -257,7 +267,8 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
 
     /**
      * 根据配置的名称生成一个deployment的名称
-     * @param  crd crd对象
+     *
+     * @param crd crd对象
      * @return deployment名称
      */
     public static String deploymentName(WebPage crd) {
@@ -266,6 +277,7 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
 
     /**
      * 根据crd的名称生成一个service的名称
+     *
      * @param crd crd对象
      * @return service名称
      */
@@ -275,6 +287,7 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
 
     /**
      * 根据crd的名称生成一个configmap名称
+     *
      * @param crd crd对象
      * @return configmap名称
      */
