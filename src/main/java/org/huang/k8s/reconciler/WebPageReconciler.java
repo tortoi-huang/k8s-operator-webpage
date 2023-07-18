@@ -18,13 +18,17 @@ import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * crd对象 huang.javaoperatorsdk/WebPage处理逻辑
+ * Reconciler接口实现WebPage对象创建、更新时需要处理的逻辑
+ * Cleaner接口实现WebPage对象删除后的清理逻辑
+ * TODO EventSourceInitializer 接口逻辑
  */
 @RateLimited(maxReconciliations = 2, within = 3)
 @ControllerConfiguration
-public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitializer<WebPage> {
+public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitializer<WebPage>,Cleaner<WebPage> {
     private static final Logger log = LoggerFactory.getLogger(WebPageReconciler.class);
 
     /**
@@ -103,14 +107,22 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
         }
 
         //创建crd对象的状态，这里简单的根据configmap状态来确定
-        webPage.setStatus(createStatus(desiredHtmlConfigMap.getMetadata().getName()));
+        //TODO 修改为按deployment的状态来确定webpage对象状态
+        WebPageStatus status = createStatus(desiredHtmlConfigMap.getMetadata().getName());
+        webPage.setStatus(status);
 
-        return UpdateControl.patchStatus(webPage);
+        UpdateControl<WebPage> webPageUpdateControl = UpdateControl.patchStatus(webPage);
+
+        //如果状态不是ready则10秒后再运行此方法检查状态
+        if(status.getAreWeGood()) {
+            return webPageUpdateControl.rescheduleAfter(10, TimeUnit.SECONDS);
+        }
+        return webPageUpdateControl;
     }
 
     /**
-     * FIXME 似乎修改configmap没有效果
-     * 注册controller监视的事件，当这里注册的事件发生会通知到controller
+     * FIXME 似乎修改configmap没有效果, 只能直接修改webpage（crd）资源
+     * 注册controller监视的事件，当这里注册的事件发生会通知到controller 触发当前的reconcile方法执行
      *
      * @param context a {@link EventSourceContext} providing access to information useful to event
      *                sources
@@ -301,5 +313,11 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
         status.setAreWeGood(true);
         status.setErrorMessage(null);
         return status;
+    }
+
+    @Override
+    public DeleteControl cleanup(WebPage resource, Context<WebPage> context) {
+        //这里做些清理告警操作
+        return DeleteControl.defaultDelete();
     }
 }
