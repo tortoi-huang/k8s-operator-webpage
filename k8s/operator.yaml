@@ -4,6 +4,7 @@ metadata:
   name: webpage-operator
 
 ---
+# 因为operator需要watch crd定义的cr资源对象，需要单独配置访问api server的权限
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -70,6 +71,7 @@ kind: ClusterRole
 metadata:
   name: webpage-operator
 rules:
+# 解析 custom resource 后需要部署标准对象的权限
 - apiGroups:
   - ""
   resources:
@@ -87,19 +89,22 @@ rules:
   - configmaps
   verbs:
   - '*'
+# watch custom resource的权限
 - apiGroups:
   - "apiextensions.k8s.io"
   resources:
   - customresourcedefinitions
   verbs:
   - '*'
+# watch custom resource的权限
 - apiGroups:
-  - "huang.javaoperatorsdk"
+  - "operator.k8s.huang.org"
   resources:
   - webpages
   - webpages/status
   verbs:
   - '*'
+# TODO 注册ingress路由的权限，本实验暂时不注册ingress
 - apiGroups:
     - "networking.k8s.io"
   resources:

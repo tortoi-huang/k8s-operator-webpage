@@ -15,8 +15,6 @@ public class LivenessHandler implements HttpHandler {
   public LivenessHandler(Operator operator) {
     this.operator = operator;
   }
-
-  // custom logic can be added here based on the health of event sources
   @Override
   public void handle(HttpExchange httpExchange) throws IOException {
     if (operator.getRuntimeInfo().allEventSourcesAreHealthy()) {

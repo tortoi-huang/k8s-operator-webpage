@@ -2,34 +2,33 @@ package org.huang.k8s.reconciler;
 
 import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
-import io.fabric8.kubernetes.api.model.networking.v1.Ingress;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.utils.Serialization;
 import io.javaoperatorsdk.operator.ReconcilerUtils;
 import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
-import io.javaoperatorsdk.operator.api.reconciler.*;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.api.reconciler.*;
 import io.javaoperatorsdk.operator.processing.event.rate.RateLimited;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import io.javaoperatorsdk.operator.processing.event.source.informer.InformerEventSource;
+import lombok.extern.slf4j.Slf4j;
 import org.huang.k8s.customresource.WebPage;
 import org.huang.k8s.customresource.WebPageStatus;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * crd对象 huang.javaoperatorsdk/WebPage处理逻辑
+ * crd对象 webpages.operator.k8s.huang.org/WebPage处理逻辑
  * Reconciler接口实现WebPage对象创建、更新时需要处理的逻辑
  * Cleaner接口实现WebPage对象删除后的清理逻辑
  * TODO EventSourceInitializer 接口逻辑
  */
 @RateLimited(maxReconciliations = 2, within = 3)
 @ControllerConfiguration
+@Slf4j
 public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitializer<WebPage>,Cleaner<WebPage> {
-    private static final Logger log = LoggerFactory.getLogger(WebPageReconciler.class);
 
     /**
      * 为部署的 deployment/pod/service添加一个label
@@ -54,7 +53,7 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
     }
 
     /**
-     * 此方法会在kubectl 调用一个WebPage crd操作api时拦截处理,
+     * 此方法会在kubectl 调用一个WebPage cr操作api时拦截处理,
      * 当crd依赖的configmap/deployment/service等资源被修改同样会触发此方法
      * @param webPage the resource that has been created or updated
      * @param context the context with which the operation is executed
@@ -81,8 +80,9 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
                     "Creating or updating ConfigMap {} in {}",
                     desiredHtmlConfigMap.getMetadata().getName(),
                     ns);
+            log.debug("configMap:\n {}", Serialization.asYaml(desiredHtmlConfigMap));
             kubernetesClient.configMaps().inNamespace(ns).resource(desiredHtmlConfigMap)
-                    .createOrReplace();
+                    .serverSideApply();
         }
 
         // 查询当前crd定义的service
@@ -92,7 +92,8 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
                     "Creating or updating service {} in {}",
                     desiredService.getMetadata().getName(),
                     ns);
-            kubernetesClient.services().inNamespace(ns).resource(desiredService).createOrReplace();
+            log.debug("service:\n {}", Serialization.asYaml(desiredService));
+            kubernetesClient.services().inNamespace(ns).resource(desiredService).serverSideApply();
         }
 
         // 查询当前crd定义的deployment
@@ -103,7 +104,7 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
                     desiredDeployment.getMetadata().getName(),
                     ns);
             kubernetesClient.apps().deployments().inNamespace(ns).resource(desiredDeployment)
-                    .createOrReplace();
+                    .serverSideApply();
         }
 
         //创建crd对象的状态，这里简单的根据configmap状态来确定

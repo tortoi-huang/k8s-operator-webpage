@@ -1,10 +1,10 @@
-apiVersion: "huang.javaoperatorsdk/v1"
+apiVersion: "operator.k8s.huang.org/v1"
 kind: WebPage
 metadata:
 # Use labels to match the resource with different reconciler implementations:
 # labels:
 #    low-level: "true"
-  name: hellows
+  name: hello-operator
 spec:
   exposed: false
   html: |
