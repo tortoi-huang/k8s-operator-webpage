@@ -6,11 +6,11 @@
         </Console>
     </Appenders>
     <Loggers>
-        <Root level="info">
+        <Root level="debug">
             <AppenderRef ref="Console"/>
         </Root>
-        <logger name="org.huang.k8s" additivity = "false" level="debug">
+        <!--<logger name="org.huang.k8s" additivity = "false" level="debug">
             <AppenderRef ref="Console"/>
-        </logger>
+        </logger>-->
     </Loggers>
 </Configuration>

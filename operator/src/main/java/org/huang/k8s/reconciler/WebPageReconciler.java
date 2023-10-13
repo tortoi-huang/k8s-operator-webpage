@@ -53,9 +53,9 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
     }
 
     /**
-     * 此方法会在kubectl 调用一个WebPage cr操作api时拦截处理,
-     * 当crd依赖的configmap/deployment/service等资源被修改同样会触发此方法
-     * @param webPage the resource that has been created or updated
+     * operator会监听 WebPage cr操作api，有事件立刻调用此方法,
+     * 如果没有事件，operator会每10秒调用一次此方法，监控资源的状态变更。
+     * @param webPage the custom resource that get from kubernetes api server
      * @param context the context with which the operation is executed
      * @return 更新的结果
      * @throws Exception
@@ -122,7 +122,6 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
     }
 
     /**
-     * FIXME 似乎修改configmap没有效果, 只能直接修改webpage（crd）资源
      * 注册controller监视的事件，当这里注册的事件发生会通知到controller 触发当前的reconcile方法执行
      *
      * @param context a {@link EventSourceContext} providing access to information useful to event
@@ -316,6 +315,13 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
         return status;
     }
 
+    /**
+     * 包含 metadata.finalizers 属性为当前资源的对象， 删除时间监听逻辑<br/>
+     * 删除时api server不会删除资源，而是添加一个 metadata.deletionTimestamp， 当operator监听到这种情况就会调用此接口方法
+     * @param resource the resource that is marked for deletion
+     * @param context the context with which the operation is executed
+     * @return
+     */
     @Override
     public DeleteControl cleanup(WebPage resource, Context<WebPage> context) {
         //这里做些清理告警操作

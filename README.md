@@ -13,16 +13,19 @@ kubectl apply -f apis/target/classes/META-INF/fabric8/webpages.operator.k8s.huan
 ```
 部署完成 crd 就可以部署 WebPage(cr), 不过此时还没有处理 WebPage(cr) 的控制器(operator也是控制器), 所以部署上去没有任何效果, 仅仅在服务器添加一行记录而已.
 
-## 打包 operator 程序 docker 镜像
-这里镜像版本号要和 [k8s/operator.yaml](k8s/operator.yaml) 中配置保持一致
-```shell
-docker buildx b ./operator/ -t webpage-operator:0.0.1
-```
-
 ## 部署 operator
 部署 operator 和部署其他 web 服务没有什么不同, 集群不会和 operator 交互，没有特殊配置, 
 operator 启动后自己去调用集群的 api watch 相关资源, 所以 operator 的 pod 需要配置 service account 以及相关的权限.
-operator 可以部署在任何命名空间, 这里部署在 webpage-operator 命名空间(写死在 k8s/operator.yaml 中了),
+operator 可以部署在任何命名空间, 这里部署在 webpage-operator 命名空间(写死在 k8s/operator.yaml 中了)。
+可以做集群外部署和集群内部署两种方式:
+### 集群外部署（idea环境）
+idea环境确保 kubernetes 的配置~/.kube/config 是正确的. 在idea中直接启动main函数
+### 集群内部署
+打包 operator 程序 docker 镜像。这里镜像版本号要和 [k8s/operator.yaml](k8s/operator.yaml) 中配置保持一致
+```shell
+docker buildx b ./operator/ -t webpage-operator:0.0.1
+```
+部署镜像服务到集群
 ```shell
 kubectl apply -f k8s/operator.yaml
 ```
