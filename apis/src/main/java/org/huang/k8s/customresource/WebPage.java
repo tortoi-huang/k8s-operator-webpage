@@ -28,4 +28,9 @@ public class WebPage extends CustomResource<WebPageSpec, WebPageStatus>
                 ", status=" + status +
                 '}';
     }
+
+    /*@Override
+    protected WebPageStatus initStatus() {
+        return new WebPageStatus();
+    }*/
 }

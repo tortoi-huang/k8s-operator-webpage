@@ -23,7 +23,7 @@ https://10.96.0.1:443/apis/operator.k8s.huang.org/v1/webpages?resourceVersion=0&
       ```
       在删除在api server 收到删除指令(kubectl delete)时不会立刻删除改资源，而是添加一个metadata.deletionTimestamp属性, 等待operator watch到该事件 转发给 Cleaner 接口去执行删除动作. 
       如果没有实现该接口则 operator不处理删除，完全由api server处理。 
-      级联删除二级资源是由二级资源是由kubernetes 完成的与 operator 和 Cleaner 接口无关， 该功能是在二级资源上添加一个指向主资源的属性 ownerReferences 如:
+      级联删除二级资源是由二级资源是由kubernetes 完成的与 operator 和 Cleaner 接口无关， 该功能是在二级资源上添加一个指向主资源的属性 ownerReferences (参考方法makeDesiredHtmlConfigMap)如:
       ```yaml
       kind: Service
       metadata:
@@ -46,5 +46,6 @@ https://10.96.0.1:443/apis/operator.k8s.huang.org/v1/webpages?resourceVersion=0&
 
 # 词汇解析
 1. Primary Resource: 主资源，需要operator处理的资源，通常是一个cr资源，如这个例子中的webpage.yaml， 也可以是kubernetes的内置资源如deployment。
-2. Secondary Resource: 二级资源， 需要处理达到的状态资源，如这里主资源需要生成的deployment, service， configmap都是二级资源，另外如果主资源部署一个deployment，那么它的二级资源是ReplicatSet
+2. Secondary Resource: 二级资源， 需要处理达到的状态资源，如这里主资源需要生成的deployment, service， configmap都是二级资源，另外如果主资源部署一个deployment，那么它的二级资源是ReplicatSet，
+  所有二级资源都必须实现 EventSourceInitializer.prepareEventSources 方法上注册， 否则 context.getSecondaryResource获取没有注册的资源会抛出异常
 3. Dependent Resource: 表达二级资源之间的依赖关系

@@ -17,6 +17,7 @@ import org.huang.k8s.customresource.WebPageStatus;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -53,8 +54,7 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
     }
 
     /**
-     * operator会监听 WebPage cr操作api，有事件立刻调用此方法,
-     * 如果没有事件，operator会每10秒调用一次此方法，监控资源的状态变更。
+     * operator会监听 WebPage cr操作api，有事件并且 WabPage 的 metadata.deletionTimestamp属性不存在或者等于0时执行此方法，否则会执行 cleanup 方法
      * @param webPage the custom resource that get from kubernetes api server
      * @param context the context with which the operation is executed
      * @return 更新的结果
@@ -73,7 +73,7 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
                 makeDesiredDeployment(webPage, deploymentName, ns, configMapName);
         Service desiredService = makeDesiredService(webPage, ns, desiredDeployment);
 
-        // 查询当前crd定义的configmap,
+        // 查询当前crd定义的configmap，该资源需要在prepareEventSources方法上由注册
         var previousConfigMap = context.getSecondaryResource(ConfigMap.class).orElse(null);
         if (!match(desiredHtmlConfigMap, previousConfigMap)) {
             log.info(
@@ -82,10 +82,14 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
                     ns);
             log.debug("configMap:\n {}", Serialization.asYaml(desiredHtmlConfigMap));
             kubernetesClient.configMaps().inNamespace(ns).resource(desiredHtmlConfigMap)
+                    // 如果使用kubectl edit编辑了configmap则这里会更新失败，抛出异常，需要添加force标记,
+                    // 参考 https://kubernetes.io/docs/reference/using-api/server-side-apply/#comparison-with-client-side-apply
+                    // 这里会调用 PATCH: /api/v1/namespaces/default/configmaps/hello-operator-html?fieldManager=fabric8, 其中fieldManager参数就是指定一个字段的管理程序是当前程序，
+                    .forceConflicts()
                     .serverSideApply();
         }
 
-        // 查询当前crd定义的service
+        // 查询当前crd定义的service，该资源需要在prepareEventSources方法上由注册
         var existingService = context.getSecondaryResource(Service.class).orElse(null);
         if (!match(desiredService, existingService)) {
             log.info(
@@ -93,10 +97,12 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
                     desiredService.getMetadata().getName(),
                     ns);
             log.debug("service:\n {}", Serialization.asYaml(desiredService));
-            kubernetesClient.services().inNamespace(ns).resource(desiredService).serverSideApply();
+            kubernetesClient.services().inNamespace(ns).resource(desiredService)
+                    .forceConflicts()
+                    .serverSideApply();
         }
 
-        // 查询当前crd定义的deployment
+        // 查询当前crd定义的deployment，该资源需要在prepareEventSources方法上由注册
         var existingDeployment = context.getSecondaryResource(Deployment.class).orElse(null);
         if (!match(desiredDeployment, existingDeployment)) {
             log.info(
@@ -104,18 +110,19 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
                     desiredDeployment.getMetadata().getName(),
                     ns);
             kubernetesClient.apps().deployments().inNamespace(ns).resource(desiredDeployment)
+                    .forceConflicts()
                     .serverSideApply();
         }
 
         //创建crd对象的状态，这里简单的根据configmap状态来确定
-        //TODO 修改为按deployment的状态来确定webpage对象状态
-        WebPageStatus status = createStatus(desiredHtmlConfigMap.getMetadata().getName());
+        //existingDeployment.getStatus()
+        WebPageStatus status = createStatus(desiredHtmlConfigMap.getMetadata().getName(), existingDeployment);
         webPage.setStatus(status);
 
         UpdateControl<WebPage> webPageUpdateControl = UpdateControl.patchStatus(webPage);
 
         //如果状态不是ready则10秒后再运行此方法检查状态
-        if(status.getAreWeGood()) {
+        if(!status.getAreWeGood()) {
             return webPageUpdateControl.rescheduleAfter(10, TimeUnit.SECONDS);
         }
         return webPageUpdateControl;
@@ -123,10 +130,15 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
 
     /**
      * 注册controller监视的事件，当这里注册的事件发生会通知到controller 触发当前的reconcile方法执行
-     *
+     * 所有二级资源都要在这里注册否则 context.getSecondaryResource 会抛出异常
      * @param context a {@link EventSourceContext} providing access to information useful to event
      *                sources
-     * @return
+     * @return 这里返回需要watch的对象，每个元素会注册一个watch api, 如这里会这侧三个watch api, 监控这些对象变化，并低调用reconcile接口方法处理
+     * https://kubernetes.docker.internal:6443/apis/apps/v1/deployments?labelSelector=ngsvr&resourceVersion=242818&timeoutSeconds=600&allowWatchBookmarks=true&watch=true
+     *
+     * https://kubernetes.docker.internal:6443/api/v1/services?labelSelector=ngsvr&resourceVersion=242818&timeoutSeconds=600&allowWatchBookmarks=true&watch=true
+     *
+     * https://kubernetes.docker.internal:6443/api/v1/configmaps?labelSelector=ngsvr&resourceVersion=242818&timeoutSeconds=600&allowWatchBookmarks=true&watch=true
      */
     @Override
     public Map<String, EventSource> prepareEventSources(EventSourceContext<WebPage> context) {
@@ -307,15 +319,17 @@ public class WebPageReconciler implements Reconciler<WebPage>, EventSourceInitia
         return crd.getMetadata().getName() + "-html";
     }
 
-    public WebPageStatus createStatus(String configMapName) {
+    public WebPageStatus createStatus(String configMapName, Deployment existingDeployment) {
         WebPageStatus status = new WebPageStatus();
         status.setHtmlConfigMap(configMapName);
-        status.setAreWeGood(true);
+        status.setAreWeGood(existingDeployment != null
+                && Objects.equals(existingDeployment.getStatus().getReplicas(), existingDeployment.getStatus().getReadyReplicas()));
         status.setErrorMessage(null);
         return status;
     }
 
     /**
+     * 当 WabPage 的 metadata.deletionTimestamp属性大于0时执行此方法
      * 包含 metadata.finalizers 属性为当前资源的对象， 删除时间监听逻辑<br/>
      * 删除时api server不会删除资源，而是添加一个 metadata.deletionTimestamp， 当operator监听到这种情况就会调用此接口方法
      * @param resource the resource that is marked for deletion
