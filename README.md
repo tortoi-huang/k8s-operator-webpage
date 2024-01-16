@@ -7,7 +7,7 @@
 mvn clean package -D maven.test.skip=true 
 ```
 ## 部署crd
-部署 crd 到 kubernetes 集群, crd 是集群资源, 没有命名空间
+部署 crd 到 kubernetes 集群, crd 是集群资源, 没有命名空间, 注意 webpages.operator.k8s.huang.org-v1.yml 文件时maven生成的，需要执行 mvn 编译才会有
 ```shell
 kubectl apply -f apis/target/classes/META-INF/fabric8/webpages.operator.k8s.huang.org-v1.yml
 ```
@@ -58,7 +58,8 @@ kubectl apply -f k8s/webpage.yaml
 ```
 operator 监控到 WebPage 更新, 会更新对应的资源, 再次刷新浏览器, 显示修改成功(通常需要等待一两分钟).
 
-## 删除 WebPage
+## 清理
+删除webpage
 ```shell
 kubectl delete -f k8s/webpage.yaml
 ```
@@ -72,4 +73,10 @@ operator 监控到 WebPage 删除会删除对应的资源. 检查相关联的标
 kubectl get all
 # configmap
 kubectl get cm
+```
+删除operator
+```shell
+kubectl delete -f k8s/operator.yaml
+# 删除crd 
+kubectl delete -f apis/target/classes/META-INF/fabric8/webpages.operator.k8s.huang.org-v1.yml
 ```
